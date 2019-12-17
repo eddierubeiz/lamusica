@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # (c) 2011-2017 Simon Budig <simon@budig.de>
 
-import sys, struct, math, getopt
+import sys, struct, math, getopt, pdb
 import cairo
 
 # Mensch macht bequem ca. 120-180 UPM.
@@ -89,10 +89,18 @@ models = {
 
 
 def output_file (model, filename, is_pdf, notelist, mindelta):
-   pwidth  = 420.0
-   pheight = 297.0
-   pwidth  = 700.0 - 20
-   pheight = 500.0 - 20
+   # This is 2x A4 in  millimeters.
+   # pwidth  = 420.0
+   # pheight = 297.0
+
+   # pwidth  = 700.0 - 20
+   # pheight = 500.0 - 20
+
+   # US Letter:
+   #215.9mm x 279.4mm
+   pwidth  = 279.4
+   pheight = 215.9
+   
    pborder = 10    - 8
    height  = model["height"]
    offset  = model["offset"]
@@ -122,8 +130,7 @@ def output_file (model, filename, is_pdf, notelist, mindelta):
          breakpos = middlepos
 
    splits.append (length)
-   print splits
-
+   
    holes = [(leadin + (n - start) * step, i * dist + offset) for i in range (len (notelist)) for n in notelist[i]]
    holes.sort ()
 
@@ -226,7 +233,6 @@ def output_file (model, filename, is_pdf, notelist, mindelta):
    del surface
 
 
-
 def output_midi (model, filename, notelist, mindelta):
    # fix up notes to correspond to midi notes
    notes = [ n + model["lowest"] for n in model["notes"] ]
@@ -240,31 +246,31 @@ def output_midi (model, filename, notelist, mindelta):
    events.sort()
 
    last_time = 0
-   eventdata = ""
+   eventdata = bytearray()
    # program select
-   eventdata += chr (0x00) + chr (0xc0) + chr (model["program"])
+   eventdata += bytearray([0x00 , 0xc0 , model["program"]])
 
    for t, i, on in events:
       dt = t - last_time
       if (dt >> 21):
-         eventdata += chr (0x80 | ((dt >> 21) & 0x7f))
+         eventdata += bytearray([ (0x80 | ((dt >> 21) & 0x7f)) ])
       if (dt >> 14):
-         eventdata += chr (0x80 | ((dt >> 14) & 0x7f))
+         eventdata += bytearray([  (0x80 | ((dt >> 14) & 0x7f))  ])
       if (dt >> 7):
-         eventdata += chr (0x80 | ((dt >> 7) & 0x7f))
+         eventdata += bytearray([  (0x80 | ((dt >> 7) & 0x7f))  ])
 
-      eventdata += chr (0x00 | ((dt >> 0) & 0x7f))
+      eventdata += bytearray([  (0x00 | ((dt >> 0) & 0x7f)) ])
       if on:
-         eventdata += chr (0x90) + chr (i) + chr (127)
+         eventdata += bytearray([ 0x90, i , 127 ])
       else:
-         eventdata += chr (0x80) + chr (i) + chr (127)
+         eventdata += bytearray([ 0x80, i, 127  ])
       last_time += dt
 
-   eventdata += "\x00\xFF\x2F\x00"
+   eventdata += bytearray([ 0x00, 0xFF, 0x2F, 0x00 ]) 
 
-   outfile = file (filename, "w")
-   outfile.write ("MThd" + struct.pack (">ihhh", 6, 0, 1, delta_ticks))
-   outfile.write ("MTrk" + struct.pack (">i", len (eventdata)))
+   outfile = open(filename, 'wb')
+   outfile.write (bytes("MThd", 'ascii') + struct.pack (">ihhh", 6, 0, 1, delta_ticks))
+   outfile.write (bytes("MTrk", 'ascii') + struct.pack (">i", len (eventdata)))
    outfile.write (eventdata)
    outfile.close ()
 
@@ -300,7 +306,11 @@ class PianoRoll (object):
    def get_compat_band (self, model):
       self.notes.sort (key=lambda x: x.ticks)
 
+      # all the notes in the piece
+
       notes = [n + model["lowest"] for n in model["notes"]]
+      # available notes
+
       band = [[] for i in range (len(notes))]
       for i in range (len (notes)):
          source_notes = [notes[i]]
@@ -314,17 +324,17 @@ class PianoRoll (object):
             n += 12
 
          band[i] = [n.ticks for n in self.notes
-                        if n.note + self.transpose[n.track % len (self.transpose)] in source_notes
+                        if n.note + self.transpose in source_notes
+                        #if n.note + self.transpose[n.track % len (self.transpose)] in source_notes
                         if not n.filtered]
          band[i] = sorted (list (set (band[i])))
-
       return band
 
 
    def min_repetition (self):
       self.notes.sort (key=lambda x: x.ticks)
       self.notes.sort (key=lambda x: x.note)
-      mindelta = sys.maxint
+      mindelta = sys.maxsize
       n0 = self.notes[0]
       for n in self.notes[1:]:
          d = n.ticks - n0.ticks
@@ -339,7 +349,7 @@ class PianoRoll (object):
    def find_transpose (self, available_notes,
                        allow_octaves=True, allow_halftones=True):
       transpose = 0
-      transpose_error = sys.maxint
+      transpose_error = sys.maxsize #sys.maxint
 
       highest = max ([n.note for n in self.notes])
       lowest  = min ([n.note for n in self.notes])
@@ -349,12 +359,13 @@ class PianoRoll (object):
 
       for trans in range (min (available_notes) - highest - 1,
                           max (available_notes) - lowest + 2):
+
          if not allow_halftones and trans % 12 != 0:
             continue
 
          if not allow_halftones and not allow_octaves and trans % 12 == 0:
             continue
-
+         
          errcount = 0
          for i in range (128):
             if (i+trans) not in available_notes:
@@ -363,8 +374,11 @@ class PianoRoll (object):
             transpose_error = errcount
             transpose = trans
 
-      print >>sys.stderr, "transposing by %d octaves and %d halftones" % (transpose / 12, transpose % 12)
-      print >>sys.stderr, "    --> %d notes not playable" % (transpose_error)
+      
+      # sys.stderr.write(  "transposing by %d octaves and %d halftones\n" % (transpose / 12, transpose % 12))
+      # sys.stderr.write(  "    --> %d notes not playable\n" % (transpose_error))
+      print(  "transposing by %d octaves and %d halftones" % (transpose / 12, transpose % 12))
+      print(  "    --> %d notes not playable" % (transpose_error))
 
       return transpose
 
@@ -401,11 +415,12 @@ class MidiImporter (object):
 
    def import_event (self, ticks, track, eventdata):
       cur_program = -1;
-      mc = ord (eventdata[0]) >> 4
-      ch = ord (eventdata[0]) & 0x0f
+      mc = eventdata[0] >> 4
+      
+      ch = eventdata[0] & 0x0f
 
       # fix up noteon with velocity = 0 to noteoff.
-      if mc == 0x09 and ord (eventdata[2]) == 0:
+      if mc == 0x09 and eventdata[2] == 0:
          mc = 0x08
 
       if mc == 0x08:
@@ -414,14 +429,15 @@ class MidiImporter (object):
       elif mc == 0x09:
          # print >>sys.stderr, ticks, ": noteon (%d)" % (ord(eventdata[0]) & 0x0f), ord (eventdata[1]), ord (eventdata[2])
          if self.cur_program != 127: # exclude percussion track
-            n = Note (ord (eventdata[1]), ticks, ch, track)
+            n = Note (eventdata[1], ticks, ch, track)
             self.target.add (n)
       elif mc == 0x0b:
          # print >>sys.stderr, ticks, ": controller", ord (eventdata[1])
          pass
       elif mc == 0x0c:
-         print >>sys.stderr, ticks, ": program change", ord (eventdata[1])
-         self.cur_program = ord (eventdata[1])
+         #print >>sys.stderr, ticks, ": program change", ord (eventdata[1])
+         self.cur_program = eventdata[1]
+         
          pass
       elif mc == 0x0d:
          # print >>sys.stderr, ticks, ": aftertouch", ord (eventdata[1])
@@ -430,7 +446,8 @@ class MidiImporter (object):
          # print >>sys.stderr, ticks, ": pitch bend"
          pass
       else:
-         print >>sys.stderr, "ticks: %d, event %r" % (ticks, eventdata)
+         #print("ticks: %d, event %r" % (ticks, eventdata))
+         # sys.stderr.write("ticks: %d, event %r" % (ticks, eventdata))
          pass
 
 
@@ -440,105 +457,114 @@ class MidiImporter (object):
       t = eventdata
       while t:
          dt = 0
-         while ord (t[0]) & 0x80:
-            dt = (dt + (ord (t[0]) & 0x7f)) << 7
+         while t[0] & 0x80:
+            dt = (dt + (t[0] & 0x7f)) << 7
+            
             t = t[1:]
-         dt += ord (t[0])
+         dt += t[0]
 
          t = t[1:]
 
-         if ord(t[0]) & 0x80:
+         if t[0] & 0x80:
             mc = t[0]
             t = t[1:]
 
-         if ord(mc) >> 4 in [0x08, 0x09, 0x0a, 0x0b, 0x0e]:
-            command = mc + t[:2]
+         if mc >> 4 in [0x08, 0x09, 0x0a, 0x0b, 0x0e]:
+            command = bytes([mc]) + t[:2]
             t = t[2:]
-         elif ord(mc) >> 4 in [0x0c, 0x0d]:
-            command = mc + t[:1]
+         
+         elif mc >> 4 in [0x0c, 0x0d]:
+            command = bytes([mc]) + t[:1]
             t = t[1:]
-         elif ord(mc) in [0xf8, 0xfa, 0xfb, 0xfc]:
+         elif mc in [0xf8, 0xfa, 0xfb, 0xfc]:
             command = mc
-         elif ord(mc) == 0xff:
-            # meta event
+         elif mc == 0xff:            
             type = t[0]
             t = t[1:]
-            command = mc + type
+            
+            command = [mc] + [type]
+
+
             l = 0
-            while ord (t[0]) & 0x80:
+            while t[0] & 0x80:
                command += t[0]
-               l = (l + (ord (t[0]) & 0x7f)) << 7
+               l = (l + (t[0] & 0x7f)) << 7
                t = t[1:]
-            l += ord (t[0])
+            l += t[0]
+            
             command += t[:l+1]
+            
             t = t[l+1:]
-         elif ord(mc) in [0xf0, 0xf7]:
+         elif mc in [0xf0, 0xf7]:
             command = mc
             l = 0
-            while ord (t[0]) & 0x80:
+            while t[0] & 0x80:
                command += t[0]
-               l = (l + (ord (t[0]) & 0x7f)) << 7
+               l = (l + (t[0] & 0x7f)) << 7
                t = t[1:]
-            l += ord (t[0])
-            command += t[:l+1]
+            l += t[0]
+            command = bytes([command]) + t[:l+1]
             t = t[l+1:]
          else:
-            raise Exception, 'unknown MIDI event: %d' % ord (t[0])
+            raise Exception('unknown MIDI event: %d' % ord (t[0]))
 
          ticks += dt
          self.import_event (ticks, track, command)
 
 
    def import_chunk (self, chunkname, chunkdata):
-      if self.timediv == 0 and chunkname != 'MThd':
-         raise Exception, "first chunk is not MThd"
+      if self.timediv == 0 and chunkname != b'MThd':
+         raise Exception("first chunk is not MThd\n")
 
-      if chunkname == 'MThd':
+      if chunkname == b'MThd':
+         
          global delta_ticks
 
          if self.timediv != 0:
-            raise Exception, "multiple MThd chunks"
+            raise Exception("multiple MThd chunks\n")
 
          if len (chunkdata) != 6:
-            raise Exception, "invalid MThd chunk"
+            raise Exception("invalid MThd chunk\n")
          mtype, n_tracks, delta_ticks = struct.unpack (">hhh", chunkdata)
          self.timediv = delta_ticks
 
-         print >>sys.stderr, "type: %d, n_tracks: %d, delta_ticks: %d" % (mtype, n_tracks, delta_ticks)
+         #sys.stderr.write("type: %d, n_tracks: %d, delta_ticks: %d\n" % (mtype, n_tracks, delta_ticks))
 
-      elif chunkname == 'MTrk':
+      elif chunkname == b'MTrk':
          self.import_ticked_events (self.num_tracks, chunkdata)
          self.num_tracks += 1
-
+      
 
    def import_file (self, filename):
-      t = file (filename).read()
 
-      while t:
-         if len (t) < 8:
-            print >>sys.stderr, "%d bytes remaining at end of MIDI file" % len(t)
-            break
-         chunkname = t[:4]
-         chunklen = struct.unpack (">I", t[4:8])[0]
-         if len (t) < 8+chunklen:
-            raise Exception, "Not enough bytes in MIDI file"
-         chunkdata = t[8:8+chunklen]
+      with open(filename, 'rb') as f:
+         t = f.read()
 
-         print >>sys.stderr, chunkname, chunklen
-         self.import_chunk (chunkname, chunkdata)
-         t = t[8+chunklen:]
-
+         while t:
+            if len (t) < 8:
+               sys.stderr.write( "%d bytes remaining at end of MIDI file\n" % len(t))
+               break
+            chunkname = t[:4]
+            chunklen = struct.unpack (">I", t[4:8])[0]
+            if len (t) < 8+chunklen:
+               raise Exception("Not enough bytes in MIDI file")
+            chunkdata = t[8:8+chunklen]
+            sys.stderr.write( chunkname.decode('utf-8'))
+            sys.stderr.write(str(chunklen))
+            self.import_chunk(chunkname, chunkdata)
+            t = t[8+chunklen:]
+      f.closed
 
 
 def usage ():
-   print >>sys.stderr, "Usage: %s [arguments] <midi-file>" % sys.argv[0]
-   print >>sys.stderr, "  -h, --help: show usage"
-   print >>sys.stderr, "  -t, --transpose=number: transpose by n halftones (avoid auto)"
-   print >>sys.stderr, "  -f, --filter=number: ignore note-repetition faster than <ticks>"
-   print >>sys.stderr, "  -b, --box=type: music box type: sankyo15, sankyo20, teanola30, sankyo33"
-   print >>sys.stderr, "  -m, --midi=filename: output midi file name (omit if not wanted)"
-   print >>sys.stderr, "  -p, --pdf=filename: output pdf file name (omit if not wanted)"
-   print >>sys.stderr, "  -s, --svg=filename: output svg file name (omit if not wanted)"
+   sys.stderr.write( "Usage: %s [arguments] <midi-file>" % sys.argv[0])
+   sys.stderr.write( "  -h, --help: show usage\n")
+   sys.stderr.write( "  -t, --transpose=number: transpose by n halftones (avoid auto)\n")
+   sys.stderr.write( "  -f, --filter=number: ignore note-repetition faster than <ticks>\n")
+   sys.stderr.write( "  -b, --box=type: music box type: sankyo15, sankyo20, teanola30, sankyo33\n")
+   sys.stderr.write( "  -m, --midi=filename: output midi file name (omit if not wanted)\n")
+   sys.stderr.write( "  -p, --pdf=filename: output pdf file name (omit if not wanted)\n")
+   sys.stderr.write( "  -s, --svg=filename: output svg file name (omit if not wanted)\n")
 
 
 
@@ -585,17 +611,16 @@ if __name__=='__main__':
 
    model = models.get (boxtype, None)
    if not model:
-      print >>sys.stderr, "Boxtype unknown. Available boxtypes are:"
+      sys.stderr.write("Boxtype unknown. Available boxtypes are:")
       ms = models.keys ()
       ms.sort ()
-      print >>sys.stderr, "  * %s" % "\n  * ".join (ms)
+      sys.stderr.write( "  * %s" % "\n  * ".join (ms))
       sys.exit (2)
 
    roll = PianoRoll()
    mi = MidiImporter (roll)
    mi.import_file (args[0])
 
-   print roll.min_repetition ()
    roll.filter_repetition (filter)
 
    if transpose == None:
