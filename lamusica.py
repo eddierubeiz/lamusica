@@ -67,7 +67,12 @@ models = {
       "diameter" :  1.8,
       "step"     :  8.0,
       "speed"    :  300./45.5,
+      #"speed"    :  500./45.5,
+   
+      #"speed"    :  1000./45.5,
+
    },
+
    # http://www.leturlutain.fr/index.php?item=33-notes-sankyo-music-box&action=article&group_id=10000033&aid=5796&lang=EN
    # http://www.spieluhr.de/Artikel/varAussehen.asp?ArtikelNr=5663
    "sankyo33" : {
@@ -97,11 +102,25 @@ def output_file (model, filename, is_pdf, notelist, mindelta):
    # pheight = 500.0 - 20
 
    # US Letter:
-   #215.9mm x 279.4mm
-   pwidth  = 279.4
-   pheight = 215.9
-   
-   pborder = 10    - 8
+   # 215.9mm x 279.4mm
+   #pwidth  = 279.4
+   #pheight = 215.9
+
+   # US Letter with a 10mm border
+   pwidth  = 269.4
+   pheight = 205.9
+
+   # US Legal
+   #pwidth = 356   
+   #pheight = 215.9
+
+   # US Legal 2
+   #pwidth = 336   
+   #pheight = 195.9
+
+
+   pborder = 4
+   #pborder = 10    - 8
    height  = model["height"]
    offset  = model["offset"]
    radius  = model["diameter"] / 2
