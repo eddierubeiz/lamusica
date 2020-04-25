@@ -68,7 +68,7 @@ models = {
       "step"     :  8.0,
       "speed"    :  300./45.5,
       #"speed"    :  500./45.5,
-   
+
       #"speed"    :  1000./45.5,
 
    },
@@ -107,19 +107,21 @@ def output_file (model, filename, is_pdf, notelist, mindelta):
    #pheight = 215.9
 
    # US Letter with a 10mm border
-   pwidth  = 269.4
-   pheight = 205.9
+   # pwidth  = 269.4
+   # pheight = 205.9
 
    # US Legal
-   #pwidth = 356   
+   #pwidth = 356
    #pheight = 215.9
 
    # US Legal 2
-   #pwidth = 336   
+   #pwidth = 336
    #pheight = 195.9
 
+   pheight = 228.6
+   pwidth = 304.8
 
-   pborder = 4
+   pborder = 3
    #pborder = 10    - 8
    height  = model["height"]
    offset  = model["offset"]
@@ -149,7 +151,7 @@ def output_file (model, filename, is_pdf, notelist, mindelta):
          breakpos = middlepos
 
    splits.append (length)
-   
+
    holes = [(leadin + (n - start) * step, i * dist + offset) for i in range (len (notelist)) for n in notelist[i]]
    holes.sort ()
 
@@ -170,6 +172,7 @@ def output_file (model, filename, is_pdf, notelist, mindelta):
    cr.translate (0.0, -pheight)
    cr.set_line_width (0.2)
 
+   # Arrow
    cr.move_to (4, 5)
    cr.line_to (7, 7)
    cr.line_to (7, 5.7)
@@ -285,7 +288,7 @@ def output_midi (model, filename, notelist, mindelta):
          eventdata += bytearray([ 0x80, i, 127  ])
       last_time += dt
 
-   eventdata += bytearray([ 0x00, 0xFF, 0x2F, 0x00 ]) 
+   eventdata += bytearray([ 0x00, 0xFF, 0x2F, 0x00 ])
 
    outfile = open(filename, 'wb')
    outfile.write (bytes("MThd", 'ascii') + struct.pack (">ihhh", 6, 0, 1, delta_ticks))
@@ -384,7 +387,7 @@ class PianoRoll (object):
 
          if not allow_halftones and not allow_octaves and trans % 12 == 0:
             continue
-         
+
          errcount = 0
          for i in range (128):
             if (i+trans) not in available_notes:
@@ -393,7 +396,7 @@ class PianoRoll (object):
             transpose_error = errcount
             transpose = trans
 
-      
+
       # sys.stderr.write(  "transposing by %d octaves and %d halftones\n" % (transpose / 12, transpose % 12))
       # sys.stderr.write(  "    --> %d notes not playable\n" % (transpose_error))
       print(  "transposing by %d octaves and %d halftones" % (transpose / 12, transpose % 12))
@@ -435,7 +438,7 @@ class MidiImporter (object):
    def import_event (self, ticks, track, eventdata):
       cur_program = -1;
       mc = eventdata[0] >> 4
-      
+
       ch = eventdata[0] & 0x0f
 
       # fix up noteon with velocity = 0 to noteoff.
@@ -456,7 +459,7 @@ class MidiImporter (object):
       elif mc == 0x0c:
          #print >>sys.stderr, ticks, ": program change", ord (eventdata[1])
          self.cur_program = eventdata[1]
-         
+
          pass
       elif mc == 0x0d:
          # print >>sys.stderr, ticks, ": aftertouch", ord (eventdata[1])
@@ -478,7 +481,7 @@ class MidiImporter (object):
          dt = 0
          while t[0] & 0x80:
             dt = (dt + (t[0] & 0x7f)) << 7
-            
+
             t = t[1:]
          dt += t[0]
 
@@ -491,16 +494,16 @@ class MidiImporter (object):
          if mc >> 4 in [0x08, 0x09, 0x0a, 0x0b, 0x0e]:
             command = bytes([mc]) + t[:2]
             t = t[2:]
-         
+
          elif mc >> 4 in [0x0c, 0x0d]:
             command = bytes([mc]) + t[:1]
             t = t[1:]
          elif mc in [0xf8, 0xfa, 0xfb, 0xfc]:
             command = mc
-         elif mc == 0xff:            
+         elif mc == 0xff:
             type = t[0]
             t = t[1:]
-            
+
             command = [mc] + [type]
 
 
@@ -510,9 +513,9 @@ class MidiImporter (object):
                l = (l + (t[0] & 0x7f)) << 7
                t = t[1:]
             l += t[0]
-            
+
             command += t[:l+1]
-            
+
             t = t[l+1:]
          elif mc in [0xf0, 0xf7]:
             command = mc
@@ -536,7 +539,7 @@ class MidiImporter (object):
          raise Exception("first chunk is not MThd\n")
 
       if chunkname == b'MThd':
-         
+
          global delta_ticks
 
          if self.timediv != 0:
@@ -552,7 +555,7 @@ class MidiImporter (object):
       elif chunkname == b'MTrk':
          self.import_ticked_events (self.num_tracks, chunkdata)
          self.num_tracks += 1
-      
+
 
    def import_file (self, filename):
 
