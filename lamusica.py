@@ -62,13 +62,16 @@ models = {
                      ],
       "program"  :  3,
       "height"   : 70.0,
+
       "offset"   :  6.0,
+      # distance between the tines
       "distance" :  2.0,
+      #diameter of the holes
       "diameter" :  1.8,
-      "step"     :  8.0,
+      # millimeters between consecutive chords
+      "step"     :  4.0,
       "speed"    :  300./45.5,
       #"speed"    :  500./45.5,
-
       #"speed"    :  1000./45.5,
 
    },
@@ -107,8 +110,8 @@ def output_file (model, filename, is_pdf, notelist, mindelta):
    #pheight = 215.9
 
    # US Letter with a 10mm border
-   # pwidth  = 269.4
-   # pheight = 205.9
+   pwidth  = 269.4
+   pheight = 205.9
 
    # US Legal
    #pwidth = 356
@@ -118,8 +121,8 @@ def output_file (model, filename, is_pdf, notelist, mindelta):
    #pwidth = 336
    #pheight = 195.9
 
-   pheight = 228.6
-   pwidth = 304.8
+   #pheight = 228.6
+   #pwidth = 304.8
 
    pborder = 3
    #pborder = 10    - 8
